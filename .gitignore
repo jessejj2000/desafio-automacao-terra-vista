@@ -1,0 +1,13 @@
+node_modules/
+.env
+*.log
+.system_generated/
+*.tmp
+/tmp
+
+# Outros projetos / Arquivos locais ignorados
+server.js
+public/
+twosun.c
+package.json
+package-lock.json

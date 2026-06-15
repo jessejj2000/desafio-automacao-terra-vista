@@ -1,0 +1,464 @@
+{
+  "id": "GoReM1W65uebzAMu",
+  "name": "Terra Vista",
+  "nodes": [
+    {
+      "id": "webhook-trigger-id",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "process-matriculas",
+        "responseMode": "lastNode",
+        "responseData": "firstEntryBinary",
+        "responseBinaryPropertyName": "data",
+        "options": {}
+      }
+    },
+    {
+      "id": "sanitize-slice-id",
+      "name": "Sanitize URLs & Slice",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst body = items[0].json.body.body;\nif (!Array.isArray(body)) {\n  throw new Error(\"Input must be a JSON array in the request body\");\n}\nconst sanitized = body.map(data => {\n  let url = data.Link_Matricula_PDF || \"\";\n  url = url.replace(/,/g, '.');\n  return {\n    ...data,\n    Link_Matricula_PDF: url,\n    URL_origem: url,\n    status_processamento: \"pendente\",\n    data_hora: new Date().toISOString(),\n    observacoes: \"\"\n  };\n});\n// Para teste de amostra, vamos pegar os 15 primeiros itens (pode mudar para processar tudo)\nconst sliced = sanitized.slice(0, 15);\nreturn [{\n  json: {\n    items: sliced,\n    index: 0,\n    results: [],\n    continue: sliced.length > 0\n  }\n}];"
+      }
+    },
+    {
+      "id": "if-has-more-items-id",
+      "name": "If (Has More Items)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        450,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "check_continue",
+              "leftValue": "={{ $json.continue }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "set-current-item-id",
+      "name": "Set Current Item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        100
+      ],
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst currentItem = input.items[input.index];\nreturn [{\n  json: {\n    ...currentItem,\n    _state: {\n      items: input.items,\n      index: input.index,\n      results: input.results\n    }\n  }\n}];"
+      }
+    },
+    {
+      "id": "download-pdf-id",
+      "name": "Download PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        900,
+        100
+      ],
+      "parameters": {
+        "url": "={{ 'https://859d2f0f998468.lhr.life/proxy?url=' + encodeURIComponent($json.Link_Matricula_PDF) }}",
+        "responseFormat": "file",
+        "outputResponseKey": "data",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "if-download-ok-id",
+      "name": "If Download OK",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "has_binary",
+              "leftValue": "={{ Object.keys($binary).includes('data') ? 'yes' : 'no' }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "yes"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "handle-download-error-id",
+      "name": "Handle Download Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const currentItem = $('Set Current Item').item.json;\nconst state = currentItem._state;\nconst processedItem = {\n  ...currentItem,\n  status_processamento: \"revisao_manual\",\n  observacoes: \"Link quebrado ou erro HTTP ao baixar o PDF\"\n};\ndelete processedItem._state;\nconst nextIndex = state.index + 1;\nreturn [{\n  json: {\n    items: state.items,\n    index: nextIndex,\n    results: [...state.results, processedItem],\n    continue: nextIndex < state.items.length\n  }\n}];"
+      }
+    },
+    {
+      "id": "extract-pdf-id",
+      "name": "Extract PDF Text",
+      "type": "n8n-nodes-base.readPDF",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        100
+      ],
+      "parameters": {
+        "binaryPropertyName": "data"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "if-text-ok-id",
+      "name": "If Text OK",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1500,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "has_text",
+              "leftValue": "={{ ($json.text ? $json.text.length : 0) > 100 }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "handle-scanned-error-id",
+      "name": "Handle Scanned Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1700,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const currentItem = $('Set Current Item').item.json;\nconst state = currentItem._state;\nconst processedItem = {\n  ...currentItem,\n  status_processamento: \"revisao_manual\",\n  observacoes: \"PDF escaneado/imagem (necessita OCR manual)\"\n};\ndelete processedItem._state;\nconst nextIndex = state.index + 1;\nreturn [{\n  json: {\n    items: state.items,\n    index: nextIndex,\n    results: [...state.results, processedItem],\n    continue: nextIndex < state.items.length\n  }\n}];"
+      }
+    },
+    {
+      "id": "prepare-prompt-id",
+      "name": "Prepare AI Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1700,
+        100
+      ],
+      "parameters": {
+        "jsCode": "const text = $input.first().json.text;\nconst cleanText = text.replace(/\\s+/g, ' ').substring(0, 15000);\nconst prompt = `Analise o texto de matr\u00edcula de im\u00f3vel abaixo e extraia as informa\u00e7\u00f5es fiscais e de propriedade estritamente conforme as regras:\\n\\nREGRAS CR\u00cdTICAS:\\n1. Extraia apenas dados LITERALMENTE presentes no texto. N\u00e3o invente nenhum dado (sem alucina\u00e7\u00f5es).\\n2. Se uma informa\u00e7\u00e3o n\u00e3o estiver expl\u00edcita na matr\u00edcula, preencha o campo correspondente como \"n\u00e3o encontrado\".\\n3. Identifique se o im\u00f3vel sofreu execu\u00e7\u00e3o por inadimpl\u00eancia (leil\u00e3o extrajudicial, consolida\u00e7\u00e3o da propriedade por aliena\u00e7\u00e3o fiduci\u00e1ria, adjudica\u00e7\u00e3o, arremata\u00e7\u00e3o). Se sim, extraia o(s) propriet\u00e1rio(s) anterior(es) afetado(s) e o n\u00famero da averba\u00e7\u00e3o.\\n\\nTEXTO DA MATR\u00cdCULA:\\n---START---\\n${cleanText}\\n---END---\\n\\nRetorne a resposta estritamente no seguinte formato JSON. N\u00e3o adicione nenhuma explica\u00e7\u00e3o extra ou Markdown:\\n{\\n  \"numero_matricula_cartorio\": \"n\u00famero da matr\u00edcula e o cart\u00f3rio / of\u00edcio de registro de im\u00f3veis\",\\n  \"inscricao_municipal\": \"inscri\u00e7\u00e3o municipal/imobili\u00e1ria do im\u00f3vel\",\\n  \"contribuinte\": \"contribuinte (titular vinculado)\",\\n  \"proprietarios_atuais\": [\"nome do propriet\u00e1rio 1\", \"nome do propriet\u00e1rio 2\"],\\n  \"indicador_execucao_inadimplencia\": true ou false,\\n  \"proprietarios_anteriores\": [\"nome do propriet\u00e1rio anterior 1\"] ou [],\\n  \"averbacao_execucao\": \"n\u00famero ou descri\u00e7\u00e3o da averba\u00e7\u00e3o de consolida\u00e7\u00e3o/leil\u00e3o\" ou \"n\u00e3o encontrado\",\\n  \"data_ultima_compra_venda\": \"data no formato DD/MM/AAAA\",\\n  \"valor_ultima_compra_venda\": \"valor em R$\",\\n  \"valor_avaliacao\": \"valor de avalia\u00e7\u00e3o em R$\",\\n  \"onus_gravames\": \"lista de \u00f4nus ativos (hipoteca, penhora, etc.) ou 'n\u00e3o encontrado'\"\\n}`;\nreturn [{ json: { prompt } }];"
+      }
+    },
+    {
+      "id": "ai-extraction-id",
+      "name": "AI Extraction",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1900,
+        100
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "google-vertex-model-id",
+      "name": "Google Vertex AI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleVertex",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        250
+      ],
+      "parameters": {
+        "model": "gemini-1.5-flash",
+        "projectId": "project-112b24ea-45b3-459e-b56",
+        "options": {}
+      },
+      "credentials": {
+        "googleApi": {
+          "id": "W3cXeOB9QZvunO6I",
+          "name": "Google Vertex Account"
+        }
+      }
+    },
+    {
+      "id": "consolidate-id",
+      "name": "Consolidate AI Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2100,
+        100
+      ],
+      "parameters": {
+        "jsCode": "const currentItem = $('Set Current Item').item.json;\nconst state = currentItem._state;\n\nlet result = {};\ntry {\n  const aiOutput = $('AI Extraction').item.json.output;\n  let parsed = aiOutput;\n  if (typeof parsed === 'string') {\n    const jsonMatch = parsed.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      parsed = JSON.parse(jsonMatch[0]);\n    } else {\n      parsed = JSON.parse(parsed);\n    }\n  }\n  result = {\n    ...currentItem,\n    ...parsed,\n    status_processamento: \"sucesso\",\n    observacoes: \"\"\n  };\n} catch (e) {\n  result = {\n    ...currentItem,\n    status_processamento: \"revisao_manual\",\n    observacoes: \"Erro ao analisar resposta da IA: \" + e.message\n  };\n}\n\ndelete result._state;\n\nconst nextIndex = state.index + 1;\nreturn [{\n  json: {\n    items: state.items,\n    index: nextIndex,\n    results: [...state.results, result],\n    continue: nextIndex < state.items.length\n  }\n}];"
+      }
+    },
+    {
+      "id": "extract-final-results-id",
+      "name": "Extract Final Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        -200
+      ],
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nreturn input.results.map(r => ({ json: r }));"
+      }
+    },
+    {
+      "id": "generate-xlsx-id",
+      "name": "Generate Output XLSX",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [
+        900,
+        -200
+      ],
+      "parameters": {
+        "operation": "toFile",
+        "binaryPropertyName": "data",
+        "fileFormat": "xlsx",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Sanitize URLs & Slice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sanitize URLs & Slice": {
+      "main": [
+        [
+          {
+            "node": "If (Has More Items)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If (Has More Items)": {
+      "main": [
+        [
+          {
+            "node": "Set Current Item",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Final Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Current Item": {
+      "main": [
+        [
+          {
+            "node": "Download PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download PDF": {
+      "main": [
+        [
+          {
+            "node": "If Download OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Download OK": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF Text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Download Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Text": {
+      "main": [
+        [
+          {
+            "node": "If Text OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Text OK": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Scanned Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Prompt": {
+      "main": [
+        [
+          {
+            "node": "AI Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Extraction": {
+      "main": [
+        [
+          {
+            "node": "Consolidate AI Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Vertex AI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Extraction",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Download Error": {
+      "main": [
+        [
+          {
+            "node": "If (Has More Items)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Scanned Error": {
+      "main": [
+        [
+          {
+            "node": "If (Has More Items)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consolidate AI Data": {
+      "main": [
+        [
+          {
+            "node": "If (Has More Items)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Final Results": {
+      "main": [
+        [
+          {
+            "node": "Generate Output XLSX",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
