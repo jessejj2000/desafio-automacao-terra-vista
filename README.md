@@ -7,9 +7,9 @@ Este repositório contém os entregáveis e a documentação para o teste práti
 ##  Entregáveis Disponibilizados no Repositório
 
 1. **Workflow n8n Exportado**: [workflow_terra_vista.json](file:///home/jessegoncalves/problm/workflow_terra_vista.json)
-   * Fluxo completo com tratamento de loops manuais, download seguro por proxy (contornando o WAF da Caixa), extração e classificação de texto nativo vs escaneado, chamadas de IA via DeepSeek e consolidação em planilha.
+   * Fluxo completo com tratamento de loops manuais, download seguro por proxy (contornando o WAF da Caixa), extração e classificação de texto nativo vs escaneado, chamadas de IA via Gemini (Google Vertex AI) e consolidação em planilha.
 2. **Planilha Consolidada (Amostra de Teste)**: [planilha_imoveis_consolidada_test.xlsx](file:///home/jessegoncalves/problm/planilha_imoveis_consolidada_test.xlsx)
-   * Planilha gerada dinamicamente pelo webhook com os resultados detalhados dos primeiros 15 registros.
+   * Planilha gerada dinamicamente pelo webhook com os resultados detalhados de uma amostra de teste (por exemplo, 50 registros).
 3. **Servidor Proxy Local**: [proxy.js](file:///home/jessegoncalves/problm/proxy.js)
    * Servidor Express utilizado para contornar o bloqueio HTTP `403 Forbidden` do WAF Azion/Radware nos servidores da Caixa, roteando os downloads pelo IP residencial do desenvolvedor via túnel SSH.
 
@@ -17,7 +17,7 @@ Este repositório contém os entregáveis e a documentação para o teste práti
 
 ##  Estudo de Volumetria, Tempo e Custo (Escala de 800+ Imóveis)
 
-Com base na execução da amostra real de 15 imóveis, realizamos o levantamento estatístico para projetar o processamento da base completa de **811 imóveis**:
+Com base na execução da amostra real, realizamos o levantamento estatístico para projetar o processamento da base completa de **811 imóveis**:
 
 ### 1. Distribuição da Base (Projeção)
 * **PDFs com Texto Nativo (Processados por IA)**: **60.0%** (~487 imóveis)
@@ -28,24 +28,30 @@ Com base na execução da amostra real de 15 imóveis, realizamos o levantamento
   * Identificados e isolados de forma segura pelo fluxo de erro sem interromper a automação.
 
 ### 2. Estimativa de Tempo de Execução
-* **Tempo por PDF Nativo**: ~15 segundos (inclui download por proxy + extração + chamada de API DeepSeek Chat).
+* **Tempo por PDF Nativo**: ~30 segundos (inclui download por proxy + envio de PDF multimodal e chamada de API Gemini).
 * **Tempo por PDF Escaneado ou Erro**: ~2 segundos (classificação instantânea e desvio rápido).
 * **Tempo Total Estimado (811 imóveis)**:
-  $$\text{Tempo} = (487 \times 15\text{s}) + (324 \times 2\text{s}) = 7.305\text{s} + 648\text{s} = 7.953\text{s} \approx \mathbf{2\text{ horas e 12 minutos}}$$
+  $$\text{Tempo} = (487 \times 30\text{s}) + (324 \times 2\text{s}) = 14.610\text{s} + 648\text{s} = 15.258\text{s} \approx \mathbf{4\text{ horas e 15 minutos}}$$
 
-### 3. Estimativa de Custos de API (DeepSeek Chat v3)
-* **Tamanho do Prompt**: ~16.500 caracteres (texto da matrícula + regras estruturais do prompt) $\approx$ **4.500 tokens de entrada**.
-* **Tamanho do Output**: JSON estruturado de ~500 caracteres $\approx$ **150 tokens de saída**.
-* **Preços de API DeepSeek Chat**:
-  * Entrada: \$0.27 por 1 milhão de tokens.
-  * Saída: \$1.10 por 1 milhão de tokens.
+### 3. Estimativa de Custos de API (Gemini 1.5/2.5 Flash via Vertex AI)
+* **Tamanho do Input**: PDF multimodal completo + regras de extração do prompt $\approx$ **5.000 tokens de entrada**.
+* **Tamanho do Output**: JSON estruturado de ~500 caracteres $\approx$ **200 tokens de saída**.
+* **Preços de API Gemini 1.5/2.5 Flash**:
+  * Entrada: \$0.075 por 1 milhão de tokens.
+  * Saída: \$0.30 por 1 milhão de tokens.
 * **Custo por Imóvel Processado**:
-  $$\text{Custo} = \left(4500 \times \frac{0.27}{10^6}\right) + \left(150 \times \frac{1.10}{10^6}\right) = \$0.001215 + \$0.000165 = \mathbf{\$0.00138\text{ USD}}$$
+  $$\text{Custo} = \left(5000 \times \frac{0.075}{10^6}\right) + \left(200 \times \frac{0.30}{10^6}\right) = \$0.000375 + \$0.000060 = \mathbf{\$0.000435\text{ USD}}$$
 * **Custo Total Estimado da Base (487 PDFs Nativos)**:
-  $$\text{Custo Total} = 487 \times \$0.00138 = \mathbf{\$0.672\text{ USD}} \approx \mathbf{R\$\,3.60\text{ BRL}}$$
+  $$\text{Custo Total} = 487 \times \$0.000435 = \mathbf{\$0.212\text{ USD}} \approx \mathbf{R\$\,1.15\text{ BRL}}$$
 
 > [!NOTE]
-> Se utilizássemos o modelo **GPT-4o** da OpenAI (Entrada: \$5.00/1M, Saída: \$15.00/1M), o custo por imóvel seria de **\$0.02475 USD**, resultando em um custo total de **\$12.05 USD** ($\approx$ R$ 65.00). A escolha do DeepSeek Chat representa uma economia de **18x (94.5%)** com precisão técnica equivalente para extração de entidades estruturadas.
+> Comparativo de custos por imóvel (baseado em 5.000 tokens de entrada e 200 de saída):
+> * **GPT-4o (OpenAI)**: \$5.00/1M entrada, \$15.00/1M saída $\rightarrow$ **\$0.02800 USD/imóvel** (Custo total: \$13.63 USD $\approx$ R$ 74.00)
+> * **Claude 3.5 Sonnet (Anthropic)**: \$3.00/1M entrada, \$15.00/1M saída $\rightarrow$ **\$0.01800 USD/imóvel** (Custo total: \$8.77 USD $\approx$ R$ 48.00)
+> * **Claude 3.5 Haiku (Anthropic)**: \$0.80/1M entrada, \$4.00/1M saída $\rightarrow$ **\$0.00480 USD/imóvel** (Custo total: \$2.34 USD $\approx$ R$ 13.00)
+> * **Gemini 1.5/2.5 Flash (Google)**: \$0.075/1M entrada, \$0.30/1M saída $\rightarrow$ **\$0.000435 USD/imóvel** (Custo total: \$0.212 USD $\approx$ R$ 1.15)
+>
+> A escolha do **Gemini Flash** representa uma economia de **64x (98.4%) em relação ao GPT-4o**, **41x (97.6%) em relação ao Claude Sonnet** e **11x (90.9%) em relação ao Claude Haiku**, entregando precisão técnica superior devido à análise nativa e multimodal do PDF (sem a necessidade de extrair texto ou executar OCR externo).
 
 ---
 
@@ -96,7 +102,7 @@ graph TD
     H --> I{If Text OK}
     I -- Não --> J[Handle Scanned Error]
     I -- Sim --> K[Prepare AI Prompt]
-    K --> L[AI Extraction - DeepSeek]
+    K --> L[AI Extraction - Gemini]
     L --> M[Consolidate AI Data]
     M --> C
     G --> C

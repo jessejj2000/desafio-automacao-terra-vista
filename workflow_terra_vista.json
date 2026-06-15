@@ -30,7 +30,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst body = items[0].json.body.body;\nif (!Array.isArray(body)) {\n  throw new Error(\"Input must be a JSON array in the request body\");\n}\nconst sanitized = body.map(data => {\n  let url = data.Link_Matricula_PDF || \"\";\n  url = url.replace(/,/g, '.');\n  return {\n    ...data,\n    Link_Matricula_PDF: url,\n    URL_origem: url,\n    status_processamento: \"pendente\",\n    data_hora: new Date().toISOString(),\n    observacoes: \"\"\n  };\n});\n// Para teste de amostra, vamos pegar os 15 primeiros itens (pode mudar para processar tudo)\nconst sliced = sanitized.slice(0, 15);\nreturn [{\n  json: {\n    items: sliced,\n    index: 0,\n    results: [],\n    continue: sliced.length > 0\n  }\n}];"
+        "jsCode": "const items = $input.all();\nconst body = items[0].json.body.body;\nif (!Array.isArray(body)) {\n  throw new Error(\"Input must be a JSON array in the request body\");\n}\nconst sanitized = body.map(data => {\n  let url = data.Link_Matricula_PDF || \"\";\n  url = url.replace(/,/g, '.');\n  return {\n    ...data,\n    Link_Matricula_PDF: url,\n    URL_origem: url,\n    status_processamento: \"pendente\",\n    data_hora: new Date().toISOString(),\n    observacoes: \"\"\n  };\n});\n// Para teste de amostra, vamos pegar os 15 primeiros itens (pode mudar para processar tudo)\nconst sliced = sanitized.slice(0, 50);\nreturn [{\n  json: {\n    items: sliced,\n    index: 0,\n    results: [],\n    continue: sliced.length > 0\n  }\n}];"
       }
     },
     {
