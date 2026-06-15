@@ -4,7 +4,7 @@ Este repositório contém os entregáveis e a documentação para o teste práti
 
 ---
 
-## 🚀 Entregáveis Disponibilizados no Repositório
+##  Entregáveis Disponibilizados no Repositório
 
 1. **Workflow n8n Exportado**: [workflow_terra_vista.json](file:///home/jessegoncalves/problm/workflow_terra_vista.json)
    * Fluxo completo com tratamento de loops manuais, download seguro por proxy (contornando o WAF da Caixa), extração e classificação de texto nativo vs escaneado, chamadas de IA via DeepSeek e consolidação em planilha.
@@ -15,7 +15,7 @@ Este repositório contém os entregáveis e a documentação para o teste práti
 
 ---
 
-## 📊 Estudo de Volumetria, Tempo e Custo (Escala de 800+ Imóveis)
+##  Estudo de Volumetria, Tempo e Custo (Escala de 800+ Imóveis)
 
 Com base na execução da amostra real de 15 imóveis, realizamos o levantamento estatístico para projetar o processamento da base completa de **811 imóveis**:
 
@@ -49,7 +49,7 @@ Com base na execução da amostra real de 15 imóveis, realizamos o levantamento
 
 ---
 
-## 🔍 Estudo de Viabilidade Técnica - Automação de IPTU (RJ e São Gonçalo)
+##  Estudo de Viabilidade Técnica - Automação de IPTU (RJ e São Gonçalo)
 
 Para enriquecer a planilha de matrículas, mapeamos a viabilidade de consultar automaticamente débitos de IPTU usando a **Inscrição Municipal** (extraída por IA nas matrículas).
 
@@ -80,7 +80,7 @@ Para enriquecer a planilha de matrículas, mapeamos a viabilidade de consultar a
 
 ---
 
-## 🛠️ Arquitetura do Workflow n8n
+##  Arquitetura do Workflow n8n
 
 O fluxo Terra Vista está estruturado com as seguintes fases:
 
@@ -113,7 +113,7 @@ graph TD
 
 ---
 
-## 🏁 Como Executar e Validar
+##  Como Executar e Validar
 
 ### 1. Iniciar o Proxy e Túnel local (se for processar novas matrículas)
 No terminal da sua máquina de desenvolvimento:
