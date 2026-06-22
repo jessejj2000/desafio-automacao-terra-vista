@@ -15,4 +15,12 @@ package-lock.json
 # Dados sensíveis (LGPD)
 *.xlsx
 *.csv
+*.pdf
 data/
+
+# Binários de túnel / ferramentas (não versionar)
+ngrok
+cloudflared
+bore
+*.tgz
+*.tar.gz
