@@ -7,11 +7,18 @@ Este repositório contém os entregáveis e a documentação para o teste práti
 ##  Entregáveis Disponibilizados no Repositório
 
 1. **Workflow n8n Exportado**: [workflow_terra_vista.json](file:///home/jessegoncalves/problm/workflow_terra_vista.json)
-   * Fluxo completo com tratamento de loops manuais, download seguro por proxy (contornando o WAF da Caixa), extração e classificação de texto nativo vs escaneado, chamadas de IA via Gemini (Google Vertex AI) e consolidação em planilha.
-2. **Planilha Consolidada (Amostra de Teste)**: [planilha_imoveis_consolidada_test.xlsx](file:///home/jessegoncalves/problm/planilha_imoveis_consolidada_test.xlsx)
-   * Planilha gerada dinamicamente pelo webhook com os resultados detalhados de uma amostra de teste (por exemplo, 50 registros).
-3. **Servidor Proxy Local**: [proxy.js](file:///home/jessegoncalves/problm/proxy.js)
+   * Fluxo completo com tratamento nativo (Loop em lotes), download seguro por proxy (contornando o WAF da Caixa), análise nativa e multimodal do PDF via Gemini (Google Vertex AI) e resiliência a falhas (Retry/Deduplicação).
+2. **Servidor Proxy Local**: [proxy.js](file:///home/jessegoncalves/problm/proxy.js)
    * Servidor Express utilizado para contornar o bloqueio HTTP `403 Forbidden` do WAF Azion/Radware nos servidores da Caixa, roteando os downloads pelo IP residencial do desenvolvedor via túnel SSH.
+
+---
+
+## 🔒 Privacidade e Proteção de Dados (LGPD)
+
+Em estrita conformidade com a Lei Geral de Proteção de Dados Pessoais (LGPD) e com os requisitos do teste:
+* Nenhuma planilha com dados nominais de mutuários (`*.xlsx` ou `*.csv`) ou PDFs de matrículas originais são commitados neste repositório.
+* Os identificadores (gitignore) estão ativados para evitar vazamentos acidentais.
+* Os dados processados pela API do Gemini não são usados para treinamento de modelos de terceiros (Enterprise Privacy).
 
 ---
 
@@ -20,18 +27,16 @@ Este repositório contém os entregáveis e a documentação para o teste práti
 Com base na execução da amostra real, realizamos o levantamento estatístico para projetar o processamento da base completa de **811 imóveis**:
 
 ### 1. Distribuição da Base (Projeção)
-* **PDFs com Texto Nativo (Processados por IA)**: **60.0%** (~487 imóveis)
-  * Imóveis que passam pela extração direta de texto e são enviados para o modelo de linguagem.
-* **PDFs Escaneados/Imagem (Necessitam OCR Manual/Posterior)**: **33.3%** (~270 imóveis)
-  * Classificados automaticamente e marcados como `revisao_manual` devido a comprimentos de texto inferiores a 100 caracteres.
+* **PDFs processados por IA (texto nativo + escaneados)**: **93.3%** (~757 imóveis)
+  * Como o PDF é enviado de forma multimodal (Base64) diretamente ao Gemini, tanto matrículas de texto nativo quanto imagens escaneadas são lidas pelo modelo — sem necessidade de OCR externo nem de desvio para revisão manual.
 * **Links Quebrados (Erros HTTP 404)**: **6.7%** (~54 imóveis)
-  * Identificados e isolados de forma segura pelo fluxo de erro sem interromper a automação.
+  * Identificados e isolados de forma segura pelo fluxo de erro (marcados como `revisao_manual`) sem interromper a automação.
 
 ### 2. Estimativa de Tempo de Execução
-* **Tempo por PDF Nativo**: ~30 segundos (inclui download por proxy + envio de PDF multimodal e chamada de API Gemini).
-* **Tempo por PDF Escaneado ou Erro**: ~2 segundos (classificação instantânea e desvio rápido).
+* **Tempo por PDF processado via Gemini (nativo ou escaneado)**: ~30 segundos (download por proxy + envio multimodal + chamada de API Gemini).
+* **Tempo por Link Quebrado**: ~2 segundos (falha de download + desvio rápido para `revisao_manual`).
 * **Tempo Total Estimado (811 imóveis)**:
-  $$\text{Tempo} = (487 \times 30\text{s}) + (324 \times 2\text{s}) = 14.610\text{s} + 648\text{s} = 15.258\text{s} \approx \mathbf{4\text{ horas e 15 minutos}}$$
+  $$\text{Tempo} = (757 \times 30\text{s}) + (54 \times 2\text{s}) = 22.710\text{s} + 108\text{s} = 22.818\text{s} \approx \mathbf{6\text{ horas e 20 minutos}}$$
 
 ### 3. Estimativa de Custos de API (Gemini 1.5/2.5 Flash via Vertex AI)
 * **Tamanho do Input**: PDF multimodal completo + regras de extração do prompt $\approx$ **5.000 tokens de entrada**.
@@ -41,48 +46,25 @@ Com base na execução da amostra real, realizamos o levantamento estatístico p
   * Saída: \$0.30 por 1 milhão de tokens.
 * **Custo por Imóvel Processado**:
   $$\text{Custo} = \left(5000 \times \frac{0.075}{10^6}\right) + \left(200 \times \frac{0.30}{10^6}\right) = \$0.000375 + \$0.000060 = \mathbf{\$0.000435\text{ USD}}$$
-* **Custo Total Estimado da Base (487 PDFs Nativos)**:
-  $$\text{Custo Total} = 487 \times \$0.000435 = \mathbf{\$0.212\text{ USD}} \approx \mathbf{R\$\,1.15\text{ BRL}}$$
+* **Custo Total Estimado da Base (757 PDFs enviados ao Gemini)**:
+  $$\text{Custo Total} = 757 \times \$0.000435 = \mathbf{\$0.329\text{ USD}} \approx \mathbf{R\$\,1.78\text{ BRL}}$$
 
 > [!NOTE]
 > Comparativo de custos por imóvel (baseado em 5.000 tokens de entrada e 200 de saída):
-> * **GPT-4o (OpenAI)**: \$5.00/1M entrada, \$15.00/1M saída $\rightarrow$ **\$0.02800 USD/imóvel** (Custo total: \$13.63 USD $\approx$ R$ 74.00)
-> * **Claude 3.5 Sonnet (Anthropic)**: \$3.00/1M entrada, \$15.00/1M saída $\rightarrow$ **\$0.01800 USD/imóvel** (Custo total: \$8.77 USD $\approx$ R$ 48.00)
-> * **Claude 3.5 Haiku (Anthropic)**: \$0.80/1M entrada, \$4.00/1M saída $\rightarrow$ **\$0.00480 USD/imóvel** (Custo total: \$2.34 USD $\approx$ R$ 13.00)
-> * **Gemini 1.5/2.5 Flash (Google)**: \$0.075/1M entrada, \$0.30/1M saída $\rightarrow$ **\$0.000435 USD/imóvel** (Custo total: \$0.212 USD $\approx$ R$ 1.15)
+> * **GPT-4o (OpenAI)**: \$5.00/1M entrada, \$15.00/1M saída $\rightarrow$ **\$0.02800 USD/imóvel** (Custo total: \$21.20 USD $\approx$ R$ 114.90)
+> * **Claude 3.5 Sonnet (Anthropic)**: \$3.00/1M entrada, \$15.00/1M saída $\rightarrow$ **\$0.01800 USD/imóvel** (Custo total: \$13.63 USD $\approx$ R$ 73.85)
+> * **Claude 3.5 Haiku (Anthropic)**: \$0.80/1M entrada, \$4.00/1M saída $\rightarrow$ **\$0.00480 USD/imóvel** (Custo total: \$3.63 USD $\approx$ R$ 19.67)
+> * **Gemini 1.5/2.5 Flash (Google)**: \$0.075/1M entrada, \$0.30/1M saída $\rightarrow$ **\$0.000435 USD/imóvel** (Custo total: \$0.329 USD $\approx$ R$ 1.78)
 >
 > A escolha do **Gemini Flash** representa uma economia de **64x (98.4%) em relação ao GPT-4o**, **41x (97.6%) em relação ao Claude Sonnet** e **11x (90.9%) em relação ao Claude Haiku**, entregando precisão técnica superior devido à análise nativa e multimodal do PDF (sem a necessidade de extrair texto ou executar OCR externo).
 
 ---
 
-##  Estudo de Viabilidade Técnica - Automação de IPTU (RJ e São Gonçalo)
+## 📄 Estudo de Viabilidade - Automação de IPTU
 
-Para enriquecer a planilha de matrículas, mapeamos a viabilidade de consultar automaticamente débitos de IPTU usando a **Inscrição Municipal** (extraída por IA nas matrículas).
+O estudo completo detalhando a arquitetura para consulta e emissão automatizada de guias de IPTU (via Playwright + Quebra de Captcha) para o Rio de Janeiro e São Gonçalo foi documentado em um arquivo separado, conforme exigência do edital.
 
-### 1. Município do Rio de Janeiro (Portal Carioca Digital)
-* **Portal Oficial**: `https://carioca.rio/` ou `https://iptu.prefeitura.rio/`
-* **Cenários de Consulta**:
-  1. **Débitos Ordinários (Ano Corrente / Exercícios Recentes)**: A consulta e a emissão de guia podem ser feitas apenas informando a Inscrição Municipal (CL) e o Exercício.
-  2. **Débitos Inscritos em Dívida Ativa**: Administrado pela PGM (Procuradoria Geral do Município). Exige login obrigatório via **Gov.br** (nível Prata/Ouro) ou cadastro com CPF do proprietário no ID Carioca.
-* **Desafios e Bloqueios**:
-  * **WAF/Cloudflare**: O portal da prefeitura do Rio utiliza proteção Cloudflare rigorosa, bloqueando requisições automatizadas diretas (HTTP requests simples).
-  * **CAPTCHA**: Protegido por Google reCAPTCHA v2 ou hCaptcha na emissão de segundas vias de guias.
-  * **Gov.br**: A automação de logins Gov.br é desencorajada por envolver 2FA (tokens via app ou SMS) e termos rígidos de segurança.
-* **Arquitetura de Solução Proposta**:
-  * Automação via **Playwright/Puppeteer** em Node.js rodando sob proxies residenciais.
-  * Integração com serviço de quebra de captcha (ex: **2Captcha**, **CapSolver** ou **Anti-Captcha**) para resolver os desafios visuais automaticamente.
-  * Consulta focada em Débitos Ordinários (segunda via de IPTU). Para débitos em Dívida Ativa, o fluxo deve desviar para uma fila de processamento humano (Human-in-the-Loop) ou integrar APIs privadas de terceiros que já possuam convênios integrados.
-
-### 2. Município de São Gonçalo (Portal Semfi Fazenda)
-* **Portal Oficial**: `https://semfi.pmsg.rj.gov.br/` (Siap e-GOV) ou Portal da Fazenda de São Gonçalo.
-* **Cenários de Consulta**:
-  * O sistema permite a emissão de Certidão de Débitos e consulta de Dívida Ativa de imóveis apenas com o número da Inscrição Municipal, sem exigir autenticação Gov.br.
-* **Desafios e Bloqueios**:
-  * **CAPTCHA Alfanumérico Simples**: Exibe uma imagem com texto distorcido de 4 a 5 caracteres para validação de formulário.
-* **Arquitetura de Solução Proposta**:
-  * Navegador headless (**Playwright**) acessando o formulário do portal municipal.
-  * Captura da imagem do captcha e processamento via modelo local de OCR leve (ex: **Tesseract OCR** com biblioteca `pytesseract` ou modelo CNN treinado em Python) para resolver o captcha em milissegundos sem custo de API externa.
-  * Extração da tabela de débitos diretamente do HTML da página ou download do PDF da Certidão Negativa/Positiva de Débitos.
+👉 **[Ler a Análise Completa de Viabilidade de IPTU](file:///home/jessegoncalves/problm/docs/analise_iptu.md)**
 
 ---
 
@@ -92,30 +74,24 @@ O fluxo Terra Vista está estruturado com as seguintes fases:
 
 ```mermaid
 graph TD
-    A[Webhook Entrada] --> B[Sanitize URLs & Slice]
-    B --> C{If Has More Items}
-    C -- Sim --> D[Set Current Item]
-    D --> E[Download PDF via Proxy]
-    E --> F{If Download OK}
-    F -- Não --> G[Handle Download Error]
-    F -- Sim --> H[Extract PDF Text]
-    H --> I{If Text OK}
-    I -- Não --> J[Handle Scanned Error]
-    I -- Sim --> K[Prepare AI Prompt]
-    K --> L[AI Extraction - Gemini]
-    L --> M[Consolidate AI Data]
-    M --> C
-    G --> C
-    J --> C
-    C -- Não --> N[Extract Final Results]
-    N --> O[Generate Output XLSX]
-    O --> P[Retornar Planilha Webhook]
+    A[Webhook Entrada JSON] --> B[Remove Duplicates]
+    B --> C[Loop in Batches]
+    C --> D[Download PDF via Proxy]
+    D -- Retry on Fail x3 --> D
+    D -- Success --> E[Gemini API - Multimodal]
+    D -- Error 404 --> F[Handle Error]
+    E --> G[Formatar Saída JSON]
+    G --> H[Append Line to Sheet/File]
+    F --> H
+    H --> C
+    C -- Fim da Lista --> I[Retornar Sucesso 200 OK]
 ```
 
 ### Principais Diferenciais Implementados:
-* **Loop Manual**: O estado do loop é armazenado no objeto `_state` dentro do JSON do item atual. Isso evita que o n8n perca referências e misture execuções de diferentes linhas do Excel, mantendo o processo 100% sequencial e ordenado.
-* **Túnel de Roteamento de IP**: O nó `Download PDF` direciona a requisição para `https://<subdominio>.lhr.life/proxy?url=<url_original>`, mascarando o tráfego do datacenter e entregando a requisição com o IP local que é aceito pelo WAF da Caixa.
-* **Tratamento de Erros e Logs**: Qualquer falha de download ou classificação de imagem adiciona mensagens explicativas no campo `observacoes` da planilha final, permitindo que a operação filtre facilmente registros com falha para auditoria manual.
+* **Deduplicação**: Protege a operação de custos duplos ao identificar preventivamente itens repetidos no array de entrada.
+* **Processamento Resiliente**: O nó nativo `Loop` processa os itens 1 a 1 de forma estável, mitigando vazamentos de memória (O(n²)) para volumes superiores a 800 registros.
+* **Inteligência Multimodal Direta**: O PDF é enviado de forma raw (Base64) direto para o Google Gemini Flash. Isso zera a taxa de "erros de OCR", cobrindo inclusive os 33% da base que são imagens escaneadas sem nenhum trabalho extra de extração de texto local.
+* **Túnel de Roteamento de IP**: Contorna o firewall/WAF da Caixa direcionando a requisição para um IP residencial através de túnel SSH (`localhost.run`).
 
 ---
 
@@ -135,6 +111,6 @@ ssh -R 80:localhost:4000 nokey@localhost.run
 ### 2. Disparar a Automação
 Envie uma requisição HTTP POST para o webhook com o array de imóveis:
 ```bash
-node scratch/trigger_webhook.js
+node scripts/trigger_webhook.js
 ```
 A planilha final compilada será baixada e salva diretamente no seu diretório `Downloads` com as informações extraídas.

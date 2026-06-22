@@ -11,3 +11,8 @@ public/
 twosun.c
 package.json
 package-lock.json
+
+# Dados sensíveis (LGPD)
+*.xlsx
+*.csv
+data/
